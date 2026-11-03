@@ -1,2 +1,0 @@
-# torchfeather
-distributed training struct

@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 
-from torch import nn
 from loguru import logger
-
+from torch import nn
 from torchfeather.model.moe import MoEArgs
 
 
@@ -45,31 +44,31 @@ class DeepSeekV3ModelArgs:
 
         for name, p in model.named_parameters():
             if "embedding" in name:
-                # 嵌入层参数
-                nparams_embedding += p.numel()
-                nparams_dense += p.numel()  # 嵌入层属于稠密参数
+                nparams_embedding += p.numel()  # 嵌入层参数
+                nparams_dense += p.numel()  # 稠密参数
             elif "moe.shared_experts" in name:
-                nparams_shared_experts += p.numel()
+                nparams_shared_experts += p.numel()  # 共享专家参数
             elif "moe.router" in name:
-                nparams_moe_router += p.numel()
+                nparams_moe_router += p.numel()  # 路由器参数
             elif "moe.experts" in name:
-                nparams_experts += p.numel()
+                nparams_experts += p.numel()  # 专家参数
             else:
-                # 否则一定是稠密模型
+                # 否则是稠密模型
                 nparams_dense += p.numel()
 
-        nparams_sparse = (
-            nparams_moe_router + nparams_shared_experts + nparams_experts
-        )  # 所有属于MoE模型的参数
-        nparams = nparams_dense + nparams_sparse
+        # 稀疏参数是所有属于 MoE 的参数
+        nparams_sparse = nparams_moe_router + nparams_shared_experts + nparams_experts
+        nparams = nparams_sparse + nparams_dense
         nparams_sparse_active = (
-            nparams_moe_router
-            + nparams_shared_experts
-            + nparams_experts * self.moe_args.top_k // self.moe_args.num_experts
+            nparams_moe_router  # 每个token 必须有一个路由器
+            + nparams_shared_experts  # 每个token 必须经过所有共享专家
+            + nparams_experts
+            * self.moe_args.top_k
+            // self.moe_args.num_experts  # 只使用 top_k 个路由专家
         )
 
         logger.info(
-            f"Total parameter count: dense {nparams_dense:,}"
+            f"Total parameter count: dense {nparams_dense:,}, "
             f"sparse {nparams_sparse:,}, active {nparams_dense + nparams_sparse_active:,}"
         )
 
@@ -80,11 +79,11 @@ class DeepSeekV3ModelArgs:
         num_flops_per_token = (
             6
             * (
-                nparams_dense  # 全部非 MoE 参数
-                - nparams_embedding  # 嵌入本质只是查字典
-                + nparams_sparse_active  # 全部 MoE 参数
-            )
-            + 6 * n_layers * n_heads * head_dims * seq_len  # 注意力的参数
-        )  # 经验法则：每个token需要的flops = 6 * P
+                nparams_dense  # 非 MoE 参数
+                - nparams_embedding  # 嵌入层参数不产生flops
+                + nparams_sparse_active  # MoE 的激活参数
+            )  # 经验：每个token需要的浮点运算次数是6
+            + 6 * n_layers * n_heads * head_dims * seq_len
+        )
 
         return nparams, num_flops_per_token
