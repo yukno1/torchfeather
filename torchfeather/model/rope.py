@@ -21,6 +21,7 @@ def precompute_freqs_cis(args: DeepSeekV3ModelArgs) -> torch.Tensor:
     def find_correction_dim(
         num_rotations: float, dim: int, base: float, max_seq_len
     ) -> float:
+        """找到能提供特定旋转的维度"""
         return (
             dim
             * math.log(max_seq_len / (num_rotations * 2 * math.pi))
@@ -30,6 +31,7 @@ def precompute_freqs_cis(args: DeepSeekV3ModelArgs) -> torch.Tensor:
     def find_correction_range(
         low_rot: float, high_rot: float, dim: int, base: float, max_seq_len: int
     ) -> tuple[int, int]:
+        """找到极值的最大最小"""
         low = math.floor(find_correction_dim(low_rot, dim, base, max_seq_len))
         high = math.floor(find_correction_dim(high_rot, dim, base, max_seq_len))
         return max(low, 0), min(high, dim - 1)
